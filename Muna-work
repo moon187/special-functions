@@ -2,6 +2,377 @@
 <html lang="ar">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لعبة التنبؤ بعمر الجهاز</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            direction: rtl;
+            background: linear-gradient(120deg, #e0f7fa, #80deea);
+            padding: 20px;
+        }
+        h2 {
+            color: #006064;
+            margin-bottom: 20px;
+        }
+        canvas {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        #lifetime {
+            font-size: 22px;
+            font-weight: bold;
+            color: #d84315;
+            margin-top: 20px;
+        }
+        .btn-simulate {
+            background-color: #006064;
+            color: white;
+            font-size: 18px;
+            padding: 10px 30px;
+        }
+        .btn-simulate:hover {
+            background-color: #00838f;
+            color: white;
+        }
+        .form-label {
+            font-weight: bold;
+            color: #004d40;
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .modal-header {
+            background: linear-gradient(120deg, #006064, #00838f);
+            color: white;
+        }
+        .modal-header .btn-close {
+            filter: brightness(0) invert(1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- زر تعرف علينا -->
+        <div class="text-end mb-3">
+            <button class="btn btn-info" data-bs-toggle="modal" data-bs-target="#aboutModal">تعرف علينا</button>
+        </div>
+
+        <h2 class="text-center">لعبة التنبؤ بعمر الجهاز بدالة جاما</h2>
+
+        <!-- بطاقة المدخلات -->
+        <div class="card p-4 mb-4">
+            <div class="row mb-3 justify-content-center align-items-end">
+                <div class="col-md-3 mb-2">
+                    <label for="shape" class="form-label">k (معامل الشكل)</label>
+                    <input type="number" id="shape" class="form-control" placeholder="k (الشكل)" value="2" step="0.1" min="0.1">
+                </div>
+                <div class="col-md-3 mb-2">
+                    <label for="lambda" class="form-label">λ (معامل ليندا)</label>
+                    <input type="number" id="lambda" class="form-control" placeholder="λ (ليندا)" value="0.2" step="0.01" min="0.01">
+                </div>
+                <div class="col-md-3 mb-2">
+                    <button class="btn btn-simulate w-100" onclick="simulate()">ابدأ المحاكاة</button>
+                </div>
+            </div>
+
+            <!-- نتيجة التنبؤ -->
+            <div class="text-center">
+                <h3 id="lifetime"></h3>
+            </div>
+        </div>
+
+        <!-- الرسوم البيانية -->
+        <div class="row">
+            <div class="col-lg-12 mb-4">
+                <div class="card p-3">
+                    <h5 class="text-center mb-3">دالة الكثافة الاحتمالية (PDF)</h5>
+                    <canvas id="pdfChart"></canvas>
+                </div>
+            </div>
+            <div class="col-lg-6 mb-4">
+                <div class="card p-3">
+                    <h5 class="text-center mb-3">دالة البقاء (Survival Function)</h5>
+                    <canvas id="survivalChart"></canvas>
+                </div>
+            </div>
+            <div class="col-lg-6 mb-4">
+                <div class="card p-3">
+                    <h5 class="text-center mb-3">دالة الخطر (Hazard Function)</h5>
+                    <canvas id="hazardChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- شرح الدوال -->
+        <div class="card p-4 mt-3">
+            <h4 class="text-center mb-4" style="color: #006064;">شرح الدوال</h4>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <div class="p-3 bg-light rounded">
+                        <h5 style="color: #1a237e;">دالة الكثافة الاحتمالية (PDF)</h5>
+                        <p>تصف احتمالية فشل الجهاز في وقت معين. تُظهر توزيع أوقات الفشل المحتملة.</p>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="p-3 bg-light rounded">
+                        <h5 style="color: #b71c1c;">دالة البقاء (Survival)</h5>
+                        <p>تُظهر احتمالية أن الجهاز سيبقى يعمل بعد وقت معين. تبدأ من 1 وتنخفض تدريجياً.</p>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="p-3 bg-light rounded">
+                        <h5 style="color: #ff6f00;">دالة الخطر (Hazard)</h5>
+                        <p>تُظهر معدل الفشل اللحظي للجهاز إذا كان لا يزال يعمل في وقت معين.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة تعرف علينا -->
+    <div class="modal fade" id="aboutModal" tabindex="-1" aria-labelledby="aboutModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="aboutModalLabel">تعرف علينا</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <h4 style="color: #006064;">فريق جاما</h4>
+                    <p class="lead">مشروع تفاعلي لمحاكاة عمر الأجهزة باستخدام توزيع جاما</p>
+                    <hr>
+                    <p>هذا المشروع يستخدم دالة جاما الإحصائية للتنبؤ بعمر الأجهزة ومحاكاة سلوك الفشل والبقاء.</p>
+                    <p><strong>عمل الطالبات:</strong></p>
+                    <ul class="list-unstyled">
+                        <li>١.أميمه بنت حمدان 244912
+   <li>٢.شمسه عبدالله النخيلي 244597</li>
+   <li>٣.مزون سعيد القرينية 243327</li>
+ <li>٤.زينب سعيد الخضوريه 243906</li>
+ <li>٥.خديجة مهنا الهاشمي 236694</li>
+<li>٦.منى سالم علي المكتومية 243453</li>
+<li>٧.تقى علي محمد الشافعي 233762</li>
+<li>٨.تذكار أحمد القطيطية 240023</li>
+<li>
+٩.ميساء سيف المزروعي246343</li>
+
+
+
+ 
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // دالة جاما باستخدام تقريب Stirling
+        function gammaFunc(n) {
+            if (n <= 0) return Infinity;
+            if (n < 0.5) {
+                return Math.PI / (Math.sin(Math.PI * n) * gammaFunc(1 - n));
+            }
+            n -= 1;
+            const g = 7;
+            const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+                771.32342877765313, -176.61502916214059, 12.507343278686905,
+                -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+            let x = c[0];
+            for (let i = 1; i < g + 2; i++) {
+                x += c[i] / (n + i);
+            }
+            const t = n + g + 0.5;
+            return Math.sqrt(2 * Math.PI) * Math.pow(t, n + 0.5) * Math.exp(-t) * x;
+        }
+
+        // دالة الكثافة الاحتمالية لتوزيع جاما
+        function gammaPDF(x, k, lambda) {
+            if (x <= 0) return 0;
+            return Math.pow(lambda, k) * Math.pow(x, k - 1) * Math.exp(-lambda * x) / gammaFunc(k);
+        }
+
+        // دالة التوزيع التراكمي لتوزيع جاما (تكامل عددي)
+        function gammaCDF(x, k, lambda, steps = 1000) {
+            if (x <= 0) return 0;
+            let sum = 0;
+            let dx = x / steps;
+            for (let i = 1; i <= steps; i++) {
+                sum += gammaPDF(i * dx, k, lambda) * dx;
+            }
+            return Math.min(sum, 1);
+        }
+
+        // متغيرات الرسوم البيانية
+        let pdfChartObj, survivalChartObj, hazardChartObj;
+
+        function simulate() {
+            let k = parseFloat(document.getElementById("shape").value);
+            let lambda = parseFloat(document.getElementById("lambda").value);
+
+            // التحقق من صحة المدخلات
+            if (isNaN(k) || isNaN(lambda) || k <= 0 || lambda <= 0) {
+                alert("يرجى إدخال قيم صحيحة موجبة لكل من k و λ");
+                return;
+            }
+
+            let t = [];
+            let pdf = [];
+            let survival = [];
+            let hazard = [];
+            let maxT = Math.max(50, k / lambda * 3); // ضبط نطاق الزمن بناءً على المعاملات
+            let steps = 500;
+
+            for (let i = 0; i <= steps; i++) {
+                let x = i * maxT / steps;
+                t.push(x.toFixed(2));
+                let p = gammaPDF(x, k, lambda);
+                pdf.push(p);
+                let s = 1 - gammaCDF(x, k, lambda);
+                survival.push(Math.max(s, 0));
+                hazard.push(s > 1e-10 ? p / s : 0);
+            }
+
+            // تدمير الرسوم البيانية السابقة
+            if (pdfChartObj) pdfChartObj.destroy();
+            if (survivalChartObj) survivalChartObj.destroy();
+            if (hazardChartObj) hazardChartObj.destroy();
+
+            // رسم دالة الكثافة الاحتمالية
+            let ctx1 = document.getElementById('pdfChart').getContext('2d');
+            pdfChartObj = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: t,
+                    datasets: [{
+                        label: 'PDF - دالة الكثافة الاحتمالية',
+                        data: pdf,
+                        borderColor: '#1a237e',
+                        backgroundColor: 'rgba(26, 35, 126, 0.2)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: true, position: 'top' }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'الزمن (وحدة زمنية)' },
+                            ticks: { maxTicksLimit: 10 }
+                        },
+                        y: { title: { display: true, text: 'الكثافة' } }
+                    }
+                }
+            });
+
+            // رسم دالة البقاء
+            let ctx2 = document.getElementById('survivalChart').getContext('2d');
+            survivalChartObj = new Chart(ctx2, {
+                type: 'line',
+                data: {
+                    labels: t,
+                    datasets: [{
+                        label: 'Survival - دالة البقاء',
+                        data: survival,
+                        borderColor: '#b71c1c',
+                        backgroundColor: 'rgba(183, 28, 28, 0.2)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: true, position: 'top' }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'الزمن (وحدة زمنية)' },
+                            ticks: { maxTicksLimit: 10 }
+                        },
+                        y: {
+                            title: { display: true, text: 'احتمال البقاء' },
+                            min: 0,
+                            max: 1
+                        }
+                    }
+                }
+            });
+
+            // رسم دالة الخطر
+            let ctx3 = document.getElementById('hazardChart').getContext('2d');
+            hazardChartObj = new Chart(ctx3, {
+                type: 'line',
+                data: {
+                    labels: t,
+                    datasets: [{
+                        label: 'Hazard - دالة الخطر',
+                        data: hazard,
+                        borderColor: '#ff6f00',
+                        backgroundColor: 'rgba(255, 111, 0, 0.2)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: true, position: 'top' }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'الزمن (وحدة زمنية)' },
+                            ticks: { maxTicksLimit: 10 }
+                        },
+                        y: { title: { display: true, text: 'معدل الخطر' } }
+                    }
+                }
+            });
+
+            // توليد عمر عشوائي للجهاز باستخدام توزيع جاما
+            let lifetime = 0;
+            for (let i = 0; i < Math.floor(k); i++) {
+                lifetime += -Math.log(Math.random()) / lambda;
+            }
+            // معالجة الجزء الكسري من k
+            if (k % 1 !== 0) {
+                let fractional = k % 1;
+                // تقريب بسيط للجزء الكسري
+                lifetime += -Math.log(Math.random()) / lambda * fractional;
+            }
+
+            document.getElementById('lifetime').innerHTML =
+                `<span class="badge bg-danger fs-5 p-3">تنبؤ عمر الجهاز: ${lifetime.toFixed(2)} وحدة زمنية</span>`;
+        }
+
+        // تشغيل المحاكاة عند تحميل الصفحة
+        window.onload = function() {
+            simulate();
+        };
+    </script>
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
     <title>تنبؤ عمر الجهاز بدالة جاما</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -50,7 +421,7 @@
     </style>
 </head>
 <body>
-
+   
 
     <script>
         function gammaPDF(x, k, lambda) {
@@ -171,4 +542,5 @@
         }
     </script>
 </body>
+</html></body>
 </html>
